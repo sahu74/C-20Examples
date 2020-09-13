@@ -1,0 +1,1501 @@
+//  https://andreasfertig.blog/2019/09/coroutines-in-cpp-insights/
+
+//! http://www.vishalchovatiya.com/learn-lambda-function-in-cpp-with-example/#Template_Lambda_ExpressionC20
+
+Modules:
+---------
+
+Modules is one of the five prominent features of C++20. Modules will overcome the restrictions of header files.
+For example, the separation of header and source files becomes as obsolete as the preprocessor. 
+In the end, we will also have faster build times and an easier way to build packages.
+
+C++20 introduces modules, a modern solution for componentization of C++ libraries and programs. 
+A module is a set of source code files that are compiled independently of the translation units that import them. 
+Modules eliminate or greatly reduce many of the problems associated with the use of header files, and also potentially reduce compilation times. 
+Macros, preprocessor directives, and non-exported names declared in a module are not visible and 
+therefore have no effect on the compilation of the translation unit that imports the module. 
+You can import modules in any order without concern for macro redefinitions. 
+Declarations in the importing translation unit do not participate in overload resolution or name lookup in the imported module. 
+After a module is compiled once, the results are stored in a binary file that describes all the exported types, functions and templates. 
+That file can be processed much faster than a header file, and can be reused by the compiler every place where the module is imported in a project.
+
+ 
+Modules can be used side by side with header files. A C++ source file can import modules and also #include header files.
+ 
+ 
+How to do it in Microsoft Visual Studio 2019 ( you must have 16.7.1 version or above).
+=============================================
+Enable modules in the Microsoft C++ compiler
+As of Visual Studio 2019 version 16.2, modules are not fully implemented in the Microsoft C++ compiler. 
+You can use the modules feature to create single-partition modules and to import the Standard Library modules provided by Microsoft. 
+To enable support for modules, compile with /experimental:module and /std:c++latest. 
+In a Visual Studio project, right-click the project node in Solution Explorer and choose Properties. 
+Set the Configuration drop-down to All Configurations,then choose Configuration Properties > C/C++ > Language > Enable C++ Modules (experimental).
+
+
+A module and the code that consumes it must be compiled with the same compiler options.
+
+Clang Compile:
+clang++ -std=c++20 - -fmodules-ts -stdlib=libc++ -c math.cppm -Xclang -emit-module-interface -o math.pcm
+
+Advantages of Modules:
+----------------------
+1) Compile-time speedup:
+-----------------------
+Modules are only imported once and are literally for free.Compare this with M headers which are included in N translation units. 
+The combinatorial explosion means, that the header has to be parsed M*N times.
+
+2) Isolation from the preprocessor macros: 
+------------------------------------------
+we should get rid of the preprocessor macros.  Using a macro is just text substitution excluding any C++ semantic. 
+This has many negative consequences: For example, it may depend on in which sequence you include macros or macros, 
+which can clash with already defined macros or names in your application. But in case of modules, it makes no difference, in which order you import modules.
+
+3)Express the logical structure of your code: 
+---------------------------------------------
+Modules enable you to express the logical structure of your code. You can explicitly specify names that should be exported or not. 
+You can bundle a few modules into a bigger module and provide them to your customer as a logical package.
+
+4)No need for header files: 
+---------------------------
+Because there is a modules, there is no need to separate your source code into an interface and an implementation part.. This means, modules just half the number of source files.
+
+5)Get rid of ugly workarounds: 
+------------------------------
+We are used to ugly workarounds such as "put an include guard around your header", or "write macros with LONG_UPPERCASE_NAMES". 
+To the contrary, identical names in modules will not clash.
+
+Anyway. C++20's modules are dependent on the exact version of the compiler they are using. You can't use modules built by GCC on clang. 
+And you can't use modules built by GCC 9 on GCC 10.
+
+----------------------------------------------------------------------------
+Example of Module
+Put the following in hello.cc:
+
+module;
+#include <iostream>
+#include <string_view>
+export module hello;
+export void greeter (std::string_view const &name)
+{
+  std::cout << "Hello " << name << "!\n";
+}
+and put the following in main.cc:
+
+import hello;
+int main (void)
+{
+  greeter ("world");
+  return 0;
+}
+Now compile with:
+
+g++ -fmodules-ts hello.cc main.cc
+./a.out
+Hello world!
+
+2)
+// helloworld.cpp
+export module helloworld;  // module declaration
+import <iostream>;         // import declaration
+ 
+export void hello() {      // export declaration
+    std::cout << "Hello world!\n";
+}
+// main.cpp
+import helloworld;  // import declaration
+ 
+int main() {
+    hello();
+}
+
+-----------------------------------------------------------------------------------
+
+
+First we will take  a classical example of Old helloWorld.cpp
+
+// helloWorld.cpp
+
+#include <iostream>
+int main() {
+    std::cout << "Hello World" << std::endl;
+}
+
+g++ helloWorld.cpp -o helloWorld
+wc -c helloWorld
+8800 helloWorld
+
+The size is more, reason there are lots of thing gets added into this helloWorld binary.
+
+
+The classical Build Process:
+---------------------------
+The build process consists of three steps  in this order: 
+1) preprocessing 
+2) compilation
+3) linking.
+
+1)Preprocessing
+===============
+The preprocessor handles the preprocessor directives such as #include and #define. 
+The preprocessor substitutes #inlude directives with the corresponding header files, and it substitutes the macros (#define). 
+Thanks to directives such as #if, #else, #elif, #ifdef, #ifndef, and #endif parts of the source code can be included or excluded.
+
+This straightforward text substitution process can be observed by using the compiler flag -E on GCC/Clang, or /E on Window
+g++ -E helloWorld.cpp | wc -c
+420880
+
+The output of the preprocessor is the input for the compiler.
+
+2)Compilation:
+==============
+The compilation is separately performed on each output of the preprocessor. The compiler parses the C++ source code and converts it into assembly code. 
+The generated file is called an object file and it contains the compiled code in binary form. 
+The object file can refer to symbols, which don't have a definition. 
+Static Library:
+---------------
+The object files can be put in archives for later reuse. 
+These archives are called static libraries.
+
+The objects or translation units which the compiler produces are the input for the linker.
+3) Linking:
+===========
+The output of the linker can be an executable or a static or shared library. It's the job of the linker to resolve the references to undefined symbols. 
+Symbols are defined in object files or in libraries. The typical error in this state is that symbols aren't defined or defined more than once.
+This build process consisting of the three steps is inherited from C. 
+It works sufficiently good enough if you only have one translation unit. But when you have more than one translation unit, many issues can occur.
+
+Issues of the Build Process:
+----------------------------
+There are flaws in the classical build process. Modules overcome these issues.
+
+1) Repeated substitution of Headers:
+===================================
+let us create 2 files:
+
+hello.cpp and hello.h
+ 
+
+// hello.cpp
+
+#include "hello.h"
+
+void hello() {
+    std::cout << "hello ";
+}
+
+// hello.h
+
+#include <iostream>
+
+void hello();
+
+here also 2 files:
+-------------------
+world.cpp and world.h
+ 
+
+// world.cpp
+
+#include "world.h"
+
+void world() {
+    std::cout << "world";
+}
+// world.h
+
+#include <iostream>
+
+void world();
+
+
+
+
+helloWorld2.cpp
+ 
+
+// helloWorld2.cpp
+
+#include <iostream>
+
+#include "hello.h"
+#include "world.h"
+
+int main() {
+    
+    hello(); 
+    world(); 
+    std::cout << std::endl;
+    
+}
+
+
+
+Noe lets us compile:
+g++ -E hello.cpp  | wc -c 
+659482
+g++ -E world.cpp  | wc -c 
+659481
+g++ -E helloWorld2.cpp  | wc -c 
+659593
+This is a waste of compile-time.
+
+In contrast, a module is only imported once and is literally for free.
+
+Isolation from Preprocessor Macros:
+-----------------------------------
+Macros depend on in which sequence we include macros or macros can clash with already defined macros or names in your application.
+Imagine we have to headers webcolors.h and productinfo.h.
+
+// webcolors.h
+
+#define RED   0xFF0000
+ 
+
+// productinfo.h
+
+#define RED   0
+When a source file client.cpp includes both headers, the value of the macro RED depends on the sequence the headers are included. 
+This dependency is very error-prone.
+In contrast, it makes no difference, in which order you import modules.
+
+Multiple Definition of Symbols:
+-------------------------------
+ODR stands for the One Definition Rule and says in the case of a function.
+
+A function can have not more than one definition in any translation unit.
+A function can have not more than one definition in the program.
+Inline functions with external linkage can be defined in more than one translation. 
+The definitions have to satisfy the requirement that each definition has to be the same.
+
+example:
+// header.h
+
+void func() {}
+// header2.h
+
+#include "header.h"
+// main.cpp
+
+#include "header.h"
+#include "header2.h"
+
+int main() {
+}
+
+The linker complains about the multiple definitions of func:
+
+We are used to ugly workarounds such as put an include guard around your header. Adding the include guard FUNC_H to the header file header.h solves the issue.
+
+ 
+
+// header.h
+
+#ifndef FUNC_H
+#define FUNC_H
+
+void func(){}
+
+#endif
+
+In contrast, identical symbols with modules are very unlikely.
+
+
+Coroutines:
+-----------
+
+
+
+
+
+
+
+
+
+The Concept Of Concepts:
+------------------------
+Concepts make sure that data used within a template fulfill a specified set of criteria, and verifies this at the beginning of the compilation process
+So as an example, instead of checking that an object is_integral, an object of type Integral is used. 
+As a result, the compiler can provide a short and meaningful error message if the defined requirement of a concept isn’t met, 
+instead of dumping walls of errors and warnings from somewhere deep within the template code itself that won’t make much sense without digging 
+further into that code.
+
+Concepts are named compile-time predicates which constrain types. A concept is a compile-time predicate (that is, something that yields a Boolean value).
+Constrains on the template parameters and meaningful compiler messages in a case on an error. Can also reduce the compilation time.
+It is an extension to the templates feature provided by the C++ programming language. Concepts are named Boolean predicates on template parameters, 
+evaluated at compile time. A concept may be associated with a template (class template, function template, or member function of a class template), 
+in which case it serves as a constraint: it limits the set of arguments that are accepted as template parameters.
+
+Concepts are predicates that you use to express a generic algorithm’s expectations on its template arguments.
+Concepts allow you to formally document constraints on templates and have the compiler enforce them. 
+As a bonus, you can also take advantage of that enforcement to improve the compile time of your program via concept-based overloading.
+
+
+Any function can use keyword requires to tell compiler which concept(s) this function should fulfill. 
+Using another words, “constrain the arguments’ type in the template”.
+
+
+Apart from letting the compiler know what data is needed, it also shows rather clearly to other developers what data is expected, 
+helping to avoid error messages in the first place, and avoids misunderstandings that lead to bugs later on. Going the other direction, 
+Concepts can also be used to constrain the return type of template functions, limiting variables to a Concept rather than a generic auto type, 
+which can be considered at C++’s void * return type.
+
+A concept is a named set of requirements. The definition of a concept must appear at namespace scope.
+The definition of a concept has the form
+
+template < template-parameter-list >
+concept concept-name = constraint-expression;
+
+// concept
+template <class T, class U>
+concept Derived = std::is_base_of<U, T>::value;
+
+
+
+
+
+
+
+The main uses of concepts are:
+-------------------------------
+
+1) Introducing type-checking to template programming
+2) Simplified compiler diagnostics for failed template instantiations
+3) Selecting function template overloads and class template specializations based on type properties
+4) Constraining automatic type deduction
+
+//! https://www.modernescpp.com/index.php/thebigfour
+//! https://dev.to/fenbf/c-20-cheatsheet-with-examples-440g
+
+Example:
+template <class T>
+concept SignedIntegral = std::is_integral_v<T> &&
+                         std::is_signed_v<T>;
+						 
+template <SignedIntegral T> // no SFINAE here!
+void signedIntsOnly(T val) { }
+
+
+
+How concept helps?
+-----------------
+1) Compiler diagnostics:
+------------------------
+If a programmer attempts to use a template argument that does not satisfy the requirements of the template, the compiler will generate an error. 
+When concepts are not used, such errors are often difficult to understand because the error is not reported in the context of the call, 
+but rather in an internal, often deeply nested, implementation context where the type was used.
+
+For example, std::sort requires that its first two arguments be random-access iterators. If an argument is not an iterator, 
+or is an iterator of a different category, an error will occur when std::sort attempts to use its parameters as bidirectional iterators:
+
+std::list<int> l = {2, 1, 3};
+std::sort(l.begin(), l.end());
+
+Typical compiler diagnostic without concepts is over 50 lines of output, beginning with a failure to compile an expression that attempts to subtract 
+two iterators:
+
+
+---------------- ERROR-----------------------------------
+In instantiation of 'void std::__sort(_RandomAccessIterator, _RandomAccessIterator, _Compare) [with _RandomAccessIterator = std::_List_iterator<int>; _Compare = __gnu_cxx::__ops::_Iter_less_iter]':
+error: no match for 'operator-' (operand types are 'std::_List_iterator<int>' and 'std::_List_iterator<int>')
+std::__lg(__last - __first) * 2,
+----------------------------------------------------------
+If concepts are used, the error can be detected and reported in the context of the call:
+
+error: cannot call function 'void std::sort(_RAIter, _RAIter) [with _RAIter = std::_List_iterator<int>]'
+note:   concept 'RandomAccessIterator()' was not satisfied
+
+
+Here in below example;
+
+
+template<typename T, bool enable = true>
+class Sample
+{
+public:
+    int DisableThisMethodOnRequest() requires(enable) { return 42; }
+};
+
+
+template<typename T, bool enable = true>
+class Sample_1
+{
+public:
+    std::enable_if_t<enable, int> DisableThisMethodOnRequest() { return 42; }
+};
+
+
+int main()
+{
+
+    Sample <int, true> ss;
+    cout << " Sanple = " << ss.DisableThisMethodOnRequest() << endl;
+    return 0;
+}
+
+
+
+some example:
+
+// placeholdersDraft.cpp
+
+#include <iostream>
+#include <type_traits>
+#include <vector>
+#include<concepts>
+using namespace std;
+
+template<typename T>                                   // (1)
+concept Integral = std::is_integral<T>::value;
+
+
+Integral auto getIntegral(int val) {                    // (2)
+    return val;
+}
+class A {};
+
+
+int main() {
+
+    std::cout << std::boolalpha << std::endl;
+
+    std::vector<int> vec{ 11, 22, 33, 44, 55 };
+    for (Integral auto i : vec) 
+        std::cout << i << " ";                          // (3)
+
+    Integral auto b = true;                            // (4)
+    std::cout << b << std::endl;
+
+    Integral auto integ = getIntegral(10);             // (5)
+    std::cout << integ << std::endl;
+
+    auto integ1 = getIntegral(12.90);                     // (6)
+    std::cout << integ1 << std::endl;
+
+  // Integral auto aa = A();
+	// std::cout << aa << std::endl; // This will cause error.
+    std::cout << std::is_integral<A>::value << '\n';
+ 
+    std::cout << std::endl;
+
+}
+
+
+concept exampe where we can have different syntactical sugar of concept use .
+// placeholdersDraft.cpp
+
+#include <iostream>
+#include <type_traits>
+#include <vector>
+#include<concepts>
+using namespace std;
+struct Dog {};
+
+struct Husky : public Dog {};
+struct Poodle :public Dog {};
+
+template<class T>
+struct is_husky {
+	static constexpr bool result = false;
+};
+template<>
+struct is_husky<Husky> {
+	static constexpr bool result = true;
+};
+
+template<typename T>
+concept  ExceptHusky = !is_husky<T>::result; // If T is husky, this concept returns false
+
+
+template<ExceptHusky T>
+void DogCanBeSmartExceptHusky(const T&& dog) {};
+
+
+
+//also works. This is for multiple require expressions, they can use ||, &, ! such operators to join
+template<class T> 
+//requires ExceptHusky<T>
+//! like below too we can write
+requires is_husky<T>::result
+void DogCanBeSmartExceptHusky_1(const T&& dog) {};
+
+
+
+int main()
+{
+	DogCanBeSmartExceptHusky(Poodle{});
+	//DogCanBeSmartExceptHusky(Husky{});
+	// Error message here: 
+	// constraints not satisfied
+	//'!(is_husky<Husky>::result)' evaluated to false
+}
+
+ExceptHusky is a concept that is required by DogCanBeSmartExceptHusky function. Function can be instantiated only when all requirements(constraints) 
+has been fulfilled (final result of require list is true).
+
+Concept also improves the readability of the code, especially in heavy use of template (SFINAE).
+
+Requires clauses:
+----------------
+The keyword requires is used to introduce a requires-clause, which specifies constraints on template arguments or on a function declaration.
+
+template<typename T>
+void f(T&&) requires Eq<T>; // can appear as the last element of a function declarator
+ 
+template<typename T> requires Addable<T> // or right after a template parameter list
+T add(T a, T b) { return a + b; }
+In this case, the keyword requires must be followed by some constant expression (so it's possible to write requires true), 
+but the intent is that a named concept (as in the example above) or a conjunction/disjunction of named concepts or a requires-expression is used.
+
+Example:
+========
+The requires keyword is used either to start a requires clause or a requires expression:
+
+template <typename T>
+  requires my_concept<T> // `requires` clause.
+void f(T);
+
+template <typename T>
+concept callable = requires (T f) { f(); }; // `requires` expression.
+
+template <typename T>
+  requires requires (T x) { x + x; } // `requires` clause and expression on same line.
+T add(T a, T b) {
+  return a + b;
+}
+
+
+Requires expressions:
+--------------------
+template<typename T>
+concept Addable = requires (T x) { x + x; }; // requires-expression
+ 
+template<typename T> requires Addable<T> // requires-clause, not requires-expression
+T add(T a, T b) { return a + b; }
+ 
+template<typename T>
+    requires requires (T x) { x + x; } // ad-hoc constraint, note keyword used twice
+T add(T a, T b) { return a + b; }
+The syntax of requires-expression is as follows:
+
+requires { requirement-seq }		
+requires ( parameter-list(optional) ) { requirement-seq }
+Each requirement in the requirements-seq is one of the following:
+
+1)simple requirement:
+===================
+Simple requirements - asserts that the given expression is valid.
+template <typename T>
+concept callable = requires (T f) { f(); };
+
+2) type requirements:
+====================
+Type requirements - denoted by the typename keyword followed by a type name, asserts that the given type name is valid.
+struct foo {
+  int foo;
+};
+
+struct bar {
+  using value = int;
+  value data;
+};
+
+struct baz {
+  using value = int;
+  value data;
+};
+//SFINAE:- "Substitution Failure Is Not An Error" 
+
+// Using SFINAE, enable if `T` is a `baz`.
+template <typename T, typename = std::enable_if_t<std::is_same_v<T, baz>>>
+struct S {};
+
+template <typename T>
+using Ref = T&;
+
+template <typename T>
+concept C = requires {
+                     // Requirements on type `T`:
+  typename T::value; // A) has an inner member named `value`
+  typename S<T>;     // B) must have a valid class template specialization for `S`
+  typename Ref<T>;   // C) must be a valid alias template substitution
+};
+
+template <C T>
+void g(T a);
+
+g(foo{}); // ERROR: Fails requirement A.
+g(bar{}); // ERROR: Fails requirement B.
+g(baz{}); // PASS.
+
+3) compound requirements:
+=========================
+Compound requirements - an expression in braces followed by a trailing return type or type constraint.
+template <typename T>
+concept C = requires(T x) {
+  {*x} -> typename T::inner; // the type of the expression `*x` is convertible to `T::inner`
+  {x + 1} -> std::same_as<int>; // the expression `x + 1` satisfies `std::same_as<decltype((x + 1))>`
+  {x * 1} -> T; // the type of the expression `x * 1` is convertible to `T`
+};
+
+4)nested requirements:
+======================
+Nested requirements - denoted by the requires keyword, specify additional constraints (such as those on local parameter arguments).
+template <typename T>
+concept C = requires(T x) {
+  requires std::same_as<sizeof(x), size_t>;
+};
+
+C++ keywords: requires:
+=======================
+specifies a constant expression on template parameters that evaluate a requirement(since C++20)
+in a template declaration, specifies an associated constraint (since C++20)
+
+
+Concept Library:
+---------------
+Concepts are also provided by the standard library for building more complicated concepts. Some of these include:
+
+Core language concepts:
+======================
+
+	same_as - specifies two types are the same.
+	derived_from - specifies that a type is derived from another type.
+	convertible_to - specifies that a type is implicitly convertible to another type.
+	common_with - specifies that two types share a common type.
+	integral - specifies that a type is an integral type.
+	default_constructible - specifies that an object of a type can be default-constructed.
+
+Comparison concepts:
+====================
+	boolean - specifies that a type can be used in Boolean contexts.
+	equality_comparable - specifies that operator== is an equivalence relation.
+
+Object concepts:
+================
+
+	movable - specifies that an object of a type can be moved and swapped.
+	copyable - specifies that an object of a type can be copied, moved, and swapped.
+	semiregular - specifies that an object of a type can be copied, moved, swapped, and default constructed.
+	regular - specifies that a type is regular, that is, it is both semiregular and equality_comparable.
+
+Callable concepts:
+==================
+
+	invocable - specifies that a callable type can be invoked with a given set of argument types.
+	predicate - specifies that a callable type is a Boolean predicate.
+
+
+
+
+
+Ranges library:
+--------------
+
+
+Type classification:
+--------------------
+Objects, references, functions including function template specializations, and expressions have a property called type.
+
+The C++ type system consists of the following types:
+---------------------------------------------------
+
+fundamental types (see also std::is_fundamental):
+	the type void (see also std::is_void);
+	the type std::nullptr_t (since C++11) (see also std::is_null_pointer);
+	arithmetic types (see also std::is_arithmetic):
+		floating-point types (float, double, long double) (see also std::is_floating_point);
+		integral types (see also std::is_integral):
+			the type bool;
+			character types:
+				narrow character types:
+					ordinary character types (char, signed char, unsigned char)
+					the type char8_t (since C++20)
+			wide character types (char16_t (since C++11), char32_t (since C++11), wchar_t);
+		signed integer types (short int, int, long int, long long int);
+		unsigned integer types (unsigned short int, unsigned int, unsigned long int, unsigned long long int);
+compound types (see also std::is_compound):
+	reference types (see also std::is_reference):
+		lvalue reference types (see also std::is_lvalue_reference):
+			lvalue reference to object types;
+			lvalue reference to function types;
+		rvalue reference types (see also std::is_rvalue_reference):
+			rvalue reference to object types;
+			rvalue reference to function types;
+	pointer types (see also std::is_pointer):
+		pointer-to-object types;
+		pointer-to-function types;
+	pointer-to-member types (see also std::is_member_pointer):
+		pointer-to-data-member types (see also std::is_member_object_pointer);
+		pointer-to-member-function types (see also std::is_member_function_pointer);
+	array types (see also std::is_array);
+	function types (see also std::is_function);
+	enumeration types (see also std::is_enum);
+	class types:
+		non-union types (see also std::is_class);
+		union types (see also std::is_union).
+		
+		
+Some examples of integral type:
+-------------------------------	
+std::is_integral
+Defined in header <type_traits>
+template< class T >
+struct is_integral;
+
+	
+Checks whether T is an integral type. Provides the member constant value which is equal to true, 
+if T is the type bool, char, char8_t, char16_t, char32_t, wchar_t, short, int, long, long long, or any implementation-defined extended integer types, 
+including any signed, unsigned, and cv-qualified variants. Otherwise, value is equal to false.
+
+
+
+class A {};
+ 
+enum E : int {};
+ 
+ 
+int main() 
+{
+    std::cout << std::boolalpha;
+    std::cout << std::is_integral<A>::value << '\n';
+    std::cout << std::is_integral<E>::value << '\n';
+    std::cout << std::is_integral<float>::value << '\n';
+    std::cout << std::is_integral<int>::value << '\n';
+    std::cout << std::is_integral<bool>::value << '\n';
+}
+Output:
+-------
+false
+false
+false
+true
+true
+
+LIke this You can see below thing:
+------------------------------------
+integral (C++20) : specifies that a type is an integral type
+is_integer() identifies integer types
+is_floating_point() :  checks if a type is a floating-point type
+is_arithmetic():  checks if a type is an arithmetic type
+
+
+CONSTEVAL:
+----------
+A new keyword that specifies an immediate function – functions that produce constant values, at compile time only. In contrast to constexpr function, 
+they cannot be called at runtime.
+consteval int add(int a, int b) { return a+b; }
+constexpr int r = add(100, 300);
+
+Immediate functions also called as consteval.
+
+Similar to constexpr functions, but functions with a consteval specifier must produce a constant. These are called immediate functions.
+
+consteval int sqr(int n) {
+  return n * n;
+}
+
+constexpr int r = sqr(100); // OK
+int x = 100;
+int r2 = sqr(x); // ERROR: the value of 'x' is not usable in a constant expression
+                 // OK if `sqr` were a `constexpr` function
+				 
+
+Example:
+========
+consteval int sqr(int n) {
+    return n * n;
+}
+ 
+consteval creates a so-called immediate function. Each invocation of an immediate function creates a compile-time constant.
+A consteval (immediate) function is executed at compile-time.consteval cannot be applied to destructors or functions which allocate or deallocate. As all these happend at runtime.
+You can only use at most one of consteval, constexpr, or constinit specifier in a declaration. 
+An immediate function (consteval) is implicit inline and has to fulfill the requirements of a constexpr function.
+
+So, a consteval function is guaranteed to be evaluated at compile time.
+A constexpr function, on the other hand, can be called at either run time or compile time.
+So all consteval function are a constexpr function But reverse are not true.
+A consteval function can only invoke a constexpr function but not the other way around
+
+
+some more example:
+------------------
+
+constexpr int foo(int factor) {
+    return 123 * factor;
+}
+ 
+const int const_factor = 10;
+int non_const_factor = 20;
+ 
+const int first = foo(const_factor);
+const int second = foo(non_const_factor);
+
+Here, first will be evaluated at compile time as all expressions and values involved are constants and as such known at compile time, 
+while second will be evaluated at run time since non_const_factor itself is not a constant. 
+
+If we declare foo() as conseval,, then It will  cause error at below line.
+const int second = foo(non_const_factor); // error.
+So we can say that consteval functions as an alternative for macro functions.
+
+// constevalSqr.cpp
+
+#include <iostream>
+
+consteval int sqr(int n) {
+    return n * n;
+}
+
+int main() {
+    
+    std::cout << "sqr(5): " << sqr(5) << std::endl;     // (1)
+    
+    const int a = 5;                                    // (2)
+    std::cout << "sqr(a): " << sqr(a) << std::endl;     
+
+    int b = 5;                                          // (3)
+    // std::cout << "sqr(b): " << sqr(b) << std::endl; ERROR
+
+}
+
+
+
+constinit:
+----------
+constinit can be applied to variables with static storage duration or thread storage duration.
+constinit ensures for this kind of variable (static storage duration or thread storage duration) that they are initialized at compile-time.
+constinit cannot be used together with constexpr or consteval. If the decorated variable is not initialized at compile-time, the program is ill-formed 
+(i.e. does not compile). Using constinit ensures that the variable is initialized at compile-time, and 
+that the static initialization order fiasco cannot take place.
+
+A  constexpr or const  declared variable can be created as a local but a constinit declared variable not.
+
+// constexprConstinit.cpp
+
+#include <iostream>
+
+constexpr int constexprVal = 1000;
+constinit int constinitVal = 1000;
+
+int incrementMe(int val){ return ++val;}
+
+int main() {
+
+    auto val = 1000;
+    const auto res = incrementMe(val);                                      // (1)                         
+    std::cout << "res: " << res << std::endl;
+    
+    // std::cout << "res: " << ++res << std::endl;                       ERROR (2)
+    // std::cout << "++constexprVal++: " << ++constexprVal << std::endl; ERROR (2)
+    std::cout << "++constinitVal++: " << ++constinitVal << std::endl;       // (3)
+
+    constexpr auto localConstexpr = 1000;                                   // (4)
+    // constinit auto localConstinit = 1000; ERROR
+    
+}
+
+
+STD::span:
+===========
+
+
+// std::span
+//! A span is a view (i.e. non-owning) of a container providing bounds-checked access to a contiguous group of elements. 
+//! Since views do not own their elements they are cheap to construct and copy -- 
+//! a simplified way to think about views is they are holding references to their data. Spans can be dynamically-sized or fixed-sized.
+
+
+void f(std::span<int> ints) {
+	std::for_each(ints.begin(), ints.end(), [](auto i) {
+		cout << " i :" << i << endl;
+	});
+}
+
+	std::vector<int> v = { 1, 2, 3 };
+	f(v);
+	
+	
+Example: 
+As opposed to maintaining a pointer and length field, a span wraps both of those up in a single container.
+
+constexpr size_t LENGTH_ELEMENTS = 3;
+int* arr = new int[LENGTH_ELEMENTS]; // arr = {0, 0, 0}
+
+// Fixed-sized span which provides a view of `arr`.
+std::span<int, LENGTH_ELEMENTS> span = arr;
+span[1] = 1; // arr = {0, 1, 0}
+
+// Dynamic-sized span which provides a view of `arr`.
+std::span<int> d_span = arr;
+span[0] = 1; // arr = {1, 1, 0}
+constexpr size_t LENGTH_ELEMENTS = 3;
+int* arr = new int[LENGTH_ELEMENTS];
+
+std::span<int, LENGTH_ELEMENTS> span = arr; // OK
+std::span<double, LENGTH_ELEMENTS> span2 = arr; // ERROR
+std::span<int, 1> span3 = arr; // ERROR
+
+
+three-way comparison operator:
+-----------------------------
+A three-way comparison is a function that will give the entire relationship in one query. Traditionally, strcmp() is such a function. 
+Given two strings it will return an integer where < 0 means the first string is less, == 0 if both are equal and > 0 if the first string is greater. 
+It can give one of three results, hence it’s a three-way comparison.
+
+C++20 — have a comparison operator that does a three-way comparison. It is commonly spelled <=> as it gives the result of <, == and > simultaneously.
+
+And as <=> sort of looks like a spaceship, it is called the “spaceship operator”. 
+
+There’s a new three-way comparison operator, <=>. The expression a <=> b returns an object that compares <0 if a < b, compares >0 if a > b, and 
+compares ==0 if a and b are equal/equivalent.
+
+
+lhs <=> rhs   (1)  
+The expression returns an object that
+
+compares <0 if lhs < rhs
+compares >0 if lhs > rhs
+and compares ==0 if lhs and rhs are equal/equivalent.
+
+The advantage is :
+
+he advantage of a three-way comparison over the mathematical relation is simple: 
+nstead of doing the whole !(a < b) && !(b < a) or a <= b && b <= a dance to figure out whether two elements are equal, 
+you can just ask that directly. And the user still needs to write only one predicate.
+
+
+example:
+You can define the three-way comparison operator or request it from the compiler with =default. 
+In both cases you get all six comparison operators: ==, !=, <, <=, >, and >=.
+
+// threeWayComparison.cpp
+
+#include <compare>
+#include <iostream>
+
+struct MyInt {
+    int value;
+    explicit MyInt(int val): value{val} { }
+    auto operator<=>(const MyInt& rhs) const {           // (1)      
+        return value <=> rhs.value;
+    }
+};
+
+struct MyDouble {
+    double value;
+    explicit constexpr MyDouble(double val): value{val} { }
+    auto operator<=>(const MyDouble&) const = default;   // (2)
+};
+
+template <typename T>
+constexpr bool isLessThan(const T& lhs, const T& rhs) {
+    return lhs < rhs;
+}
+
+int main() {
+    
+    std::cout << std::boolalpha << std::endl;
+    
+    MyInt myInt1(2011);
+    MyInt myInt2(2014);
+    
+    std::cout << "isLessThan(myInt1, myInt2): "
+              << isLessThan(myInt1, myInt2) << std::endl;
+              
+    MyDouble myDouble1(2011);
+    MyDouble myDouble2(2014);
+    
+    std::cout << "isLessThan(myDouble1, myDouble2): "
+              << isLessThan(myDouble1, myDouble2) << std::endl;          
+              
+    std::cout << std::endl;
+              
+}
+
+2)
+The Compiler-Generated Spaceship Operator
+The compiler-generated three-way comparison operator needs the header <compare>, is implicit constexpr and noexcept. Additionally, 
+it performs a lexicographical comparison. What? Let me start with constexpr
+
+// threeWayComparisonAtCompileTime.cpp
+
+#include <compare>
+#include <iostream>
+
+struct MyDouble {
+    double value;
+    explicit constexpr MyDouble(double val): value{val} { }
+    auto operator<=>(const MyDouble&) const = default;    
+};
+
+template <typename T>
+constexpr bool isLessThan(const T& lhs, const T& rhs) {
+    return lhs < rhs;
+}
+
+int main() {
+    
+    std::cout << std::boolalpha << std::endl;
+
+              
+    constexpr MyDouble myDouble1(2011);
+    constexpr MyDouble myDouble2(2014);
+    
+    constexpr bool res = isLessThan(myDouble1, myDouble2); // (1)
+    
+    std::cout << "isLessThan(myDouble1, myDouble2): "
+              << res << std::endl;          
+              
+    std::cout << std::endl;
+              
+}
+
+3)
+#include <compare>
+#include <iostream>
+ 
+int main() {
+    double foo = -0.0;
+    double bar = 0.0;
+ 
+    auto res = foo <=> bar;
+ 
+    if (res < 0)
+        std::cout << "-0 is less than 0";
+    else if (res == 0)
+        std::cout << "-0 and 0 are equal";
+    else if (res > 0)
+        std::cout << "-0 is greater than 0";
+}
+
+Designated Initializers:
+------------------------
+Explicit member names in the initializer expression. C-style designated initializer syntax. 
+Any member fields that are not explicitly listed in the designated initializer list are default-initialized.
+
+example 1:
+struct A {
+  int x;
+  int y;
+  int z = 123;
+};
+
+A a {.x = 1, .z = 2}; // a.x == 1, a.y == 0, a.z == 2
+
+example 2:
+==========
+struct S {
+	int a; 
+	int b; 
+	int c; 
+};
+
+S test {
+.a = 1, 
+.b = 10, 
+.c = 2
+}; 
+
+Range-based for loop with initializer:
+--------------------------------
+This feature simplifies common code patterns, helps keep scopes tight, and offers an elegant solution to a common lifetime problem.
+Create another variable in the scope of the for loop:
+
+for (auto v = std::vector{1, 2, 3}; auto& e : v) {
+  std::cout << e;
+}
+// prints "123"
+
+
+
+Before the c++20:
+=================
+{
+  T thing = f();
+  for (auto& x : thing.items()) {
+    // Note: “for (auto& x : f().items())” is WRONG
+    mutate(&x);
+    log(x);
+  }
+}
+
+With the proposal  c++20
+=======================
+for (T thing = f(); auto& x : thing.items()) {
+  mutate(&x);
+  log(x);
+}
+Before the c++20:
+=================
+{
+  std::size_t i = 0;
+  for (const auto& x : foo()) {
+    bar(x, i);
+    ++i;
+  }
+}
+With the proposal  c++20:
+========================
+for (std::size_t i = 0; const auto& x : foo()) {
+  bar(x, i);
+  ++i;
+}
+
+
+
+C++20 Attributes:
+-----------------
+
+Purpose of attributes in C++11:
+Lets recap the  purpose of attributes in c++ first:
+
+Basicaly it is used to enforce constraint on the code itself.
+Here constraint refers to a condition, that the arguments of a particular function must meet for its execution (precondition). 
+In previous versions of C++, the code for specifying constraints was written in this manner.
+
+int f(int i) 
+{ 
+    if (i > 0) 
+        return i; 
+    else
+        return -1; 
+  
+    // Code 
+} 
+Using atributes:
+----------------
+1)
+int f(int i)[[expects:i > 0]] 
+{ 
+    // Code 
+} 
+
+2)
+int f(int i) 
+{ 
+    switch (i) { 
+    case 1: 
+        [[fallthrough]]; 
+        [[likely]] case 2 : return 1; 
+    } 
+    return -1; 
+} 
+
+When the statement is preceded by likely compiler makes special optimizations with respect to that statement which improves the overall performance of the code. 
+Some examples of such attributes are [carries_dependency], [likely], [unlikely].
+
+
+#include <iostream> 
+#include <string> 
+  
+int main() 
+{ 
+  
+    // Set debug mode in compiler or 'R' 
+    [[maybe_unused]] char mg_brk = 'D'; 
+  
+    // Compiler does not emit any warnings 
+    // or error on this unused variable 
+} 
+
+If we dont use "maybe_unused", then we will ger below warning from compiler.
+
+main.cpp: In function 'int main()':
+main.cpp:8:11: warning: unused variable 'mg_brk' [-Wunused-variable]
+    8 |      char mg_brk = 'D';
+
+
+
+C++20 attributes:
+------------------
+likely: For optimisation of certain statements that have more probability to execute than others. 
+Likely is now available in latest version of GCC compiler for experimentation purposes.
+int f(int i) 
+{ 
+    switch (i) { 
+    case 1: 
+        [[fallthrough]]; 
+        [[likely]] case 2 : return 1; 
+    } 
+    return 2; 
+} 
+no_unique_address: 
+Indicates that this data member need not have an address distinct from all other non-static data members of its class. This means that 
+if the class consist of an empty type then the compiler can perform empty base optimisation on it.
+
+// empty class ( No state!) 
+struct Empty { 
+}; 
+  
+struct X { 
+    int i; 
+    Empty e; 
+}; 
+  
+struct Y { 
+    int i; 
+    [[no_unique_address]] Empty e; 
+}; 
+
+int main() 
+{ 
+    // the size of any object of 
+    // empty class type is at least 1 
+    static_assert(sizeof(Empty) >= 1); 
+  
+    // at least one more byte is needed 
+    // to give e a unique address 
+    static_assert(sizeof(X) >= sizeof(int) + 1); 
+  
+    // empty base optimization applied 
+    static_assert(sizeof(Y) == sizeof(int)); 
+} 
+
+
+likely and unlikely attributes
+Provides a hint to the optimizer that the labelled statement is likely/unlikely to have its body executed.
+
+int random = get_random_number_between_x_and_y(0, 3);
+[[likely]] if (random > 0) {
+  // body of if statement
+  // ...
+}
+
+[[unlikely]] while (unlikely_truthy_condition) {
+  // body of while statement
+  // ...
+}
+
+
+
+Deprecate implicit capture of this:
+----------------------------------
+//! http://open-std.org/JTC1/SC22/WG21/docs/papers/2018/p0806r2.html
+
+This inconsistency in defaults is confusing. Users may well know that there exists an inconsistency, 
+but it is much harder to know which way round the inconsistency goes. 
+For this reason, we propose that users should never rely on implicit capture of *this via a [=]-capture-default. 
+(The implicit capture of *this via [&] continues to be idiomatic.)
+
+[=] → [=,  this]: local variables by value, class members by reference
+[=] → [=, *this]: everything by value
+[&] → [&,  this]: everything by reference
+[&] → [&, *this]: (this would be unusual)
+
+
+Before it was like below:
+-----------------------
+struct Foo {
+  int n = 0;
+  auto f(int a) {
+    return [=](int k) { return n + a * k; };
+  }
+};
+
+After c++20:
+------------
+struct Foo {
+  int n = 0;
+  auto f(int a) {
+    return [=,*this](int k) { return n + a * k; };
+  }
+};
+
+some more examaple:
+------------------
+
+struct int_value {
+  int n = 0;
+  auto getter_fn() {
+    // BAD:
+    // return [=]() { return n; };
+
+    // GOOD:
+    return [=, *this]() { return n; };
+  }
+};
+
+
+Class types in non-type template parameters:
+--------------------------------------------
+A non-type template argument provided within a template argument list is an expression whose value can be determined at compile time. 
+Such arguments must be constant expressions, addresses of functions or objects with external linkage, or addresses of static class members. 
+Non-type template arguments are normally used to initialize a class or to specify the sizes of class members.
+
+Non-type parameters
+
+A template non-type parameter is a special type of parameter that does not substitute for a type, but is instead replaced by a value. 
+A non-type parameter can be any of the following:
+
+A value that has an integral type or enumeration
+A pointer or reference to a class object
+A pointer or reference to a function
+A pointer or reference to a class member function
+std::nullptr_t
+
+
+
+Example of Non type template parameter.
+
+#include <iostream>
+ 
+template <class T, int size> // size is the non-type parameter
+class StaticArray
+{
+private:
+    // The non-type parameter controls the size of the array
+    T m_array[size];
+ 
+public:
+    T* getArray();
+	
+    T& operator[](int index)
+    {
+        return m_array[index];
+    }
+};
+ 
+// Showing how a function for a class with a non-type parameter is defined outside of the class
+template <class T, int size>
+T* StaticArray<T, size>::getArray()
+{
+    return m_array;
+}
+ 
+int main()
+{
+    // declare an integer array with room for 12 integers
+    StaticArray<int, 12> intArray;
+ 
+    // Fill it up in order, then print it backwards
+    for (int count=0; count < 12; ++count)
+        intArray[count] = count;
+ 
+    for (int count=11; count >= 0; --count)
+        std::cout << intArray[count] << " ";
+    std::cout << '\n';
+	return 0;
+}
+
+
+In the following example, a class template is defined that requires a non-type template int argument as well as the type argument:
+template<class T, int size> class Myfilebuf
+{
+      T* filepos;
+      static int array[size];
+public:
+      Myfilebuf() { /* ... */ }
+      ~Myfilebuf();
+
+};
+
+In this example, the template argument size becomes a part of the template class name. An object of such a template class is created 
+with both the type argument T of the class and the value of the non-type template argument size.
+
+An object x, and its corresponding template class with arguments double and size=200, can be created from this template with a value 
+as its second template argument:
+
+Myfilebuf<double,200> x;Copy code
+x can also be created using an arithmetic expression:
+Myfilebuf<double,10*20> x;Copy code
+The objects created by these expressions are identical because the template arguments evaluate identically. 
+The value 200 in the first expression could have been represented by an expression whose result at compile time is known to be equal to 200, 
+as shown in the second construction.
+
+
+One more clasic example:
+------------------------
+
+#include <iostream>
+using namespace std;
+
+struct foo {
+    int aa=300;
+	foo() = default;
+	constexpr foo( int a) {
+	    aa=a;
+	}
+};
+
+template <foo f>
+auto get_foo() {
+    cout<<f.aa<<"\n";;
+	return f;
+}
+
+int main()
+{
+
+get_foo<foo{}>(); // uses implicit constructor
+get_foo < foo{ 123 } > ();
+
+}
+
+
+constexpr virtual functions:
+----------------------------
+Virtual functions can now be constexpr and evaluated at compile-time. constexpr virtual functions can override non-constexpr virtual functions and vice-versa.
+
+struct X1 {
+  virtual int f() const = 0;
+};
+
+struct X2: public X1 {
+  constexpr virtual int f() const { return 2; }
+};
+
+struct X3: public X2 {
+  virtual int f() const { return 3; }
+};
+
+struct X4: public X3 {
+  constexpr virtual int f() const { return 4; }
+};
+
+constexpr X4 x4;
+x4.f(); // == 4
+
+explicit(bool):
+-----------------
+Conditionally select at compile-time whether a constructor is made explicit or not. explicit(true) is the same as specifying explicit.
+
+struct foo {
+  // Specify non-integral types (strings, floats, etc.) require explicit construction.
+  template <typename T>
+  explicit(!std::is_integral_v<T>) foo(T) {}
+};
+
+foo a = 123; // OK
+foo b = "123"; // ERROR: explicit constructor is not a candidate (explicit specifier evaluates to true)
+foo c {"123"}; // OK
+
+using enum:
+-----------
+Bring an enum's members into scope to improve readability. Before:
+
+enum class rgba_color_channel { red, green, blue, alpha };
+
+std::string_view to_string(rgba_color_channel channel) {
+  switch (channel) {
+    case rgba_color_channel::red:   return "red";
+    case rgba_color_channel::green: return "green";
+    case rgba_color_channel::blue:  return "blue";
+    case rgba_color_channel::alpha: return "alpha";
+  }
+}
+After:
+
+enum class rgba_color_channel { red, green, blue, alpha };
+
+std::string_view to_string(rgba_color_channel my_channel) {
+  switch (my_channel) {
+    using enum rgba_color_channel;
+    case red:   return "red";
+    case green: return "green";
+    case blue:  return "blue";
+    case alpha: return "alpha";
+  }
+}
+
+
+
