@@ -1,0 +1,244 @@
+Lambda function:
+----------------
+What is lambda function?
+A lambda function is short snippets of code that
+
+	not worth naming(unnamed, anonymous, disposable, etc. whatever you can call it),
+	and also not reused.
+	
+	[ capture list ] (parameters) -> return-type  
+	{   
+    method definition
+	} 
+	
+Usually, compiler evaluates a return type of a lambda function itself. So we don’t need to specify a trailing return type explicitly i.e. -> return-type.
+But in some complex cases, the compiler unable to deduce the return type and we need to specify that
+
+Why Should We Use a Lambda Function?
+struct print {
+    void operator()(int element) {
+        cout << element << endl;
+    }
+};
+
+int main(void) {
+    vector<int> v = {1, 2, 3, 4, 5};
+    for_each(v.begin(), v.end(), print());
+    return EXIT_SUCCESS;
+}
+
+
+This we can write using lambda like below:
+int main(void) {
+vector<int> v = {1, 2, 3, 4, 5};
+for_each(v.begin(), v.end(), [](int element) { cout << element << endl; });
+}
+
+How Does Lambda Functions Works Internally?
+
+[&i] ( ) { cout << i; }
+
+// is equivalent to
+
+struct anonymous {
+    int &m_i;
+    anonymous(int &i) : m_i(i) {}
+    inline auto operator()() const {
+        cout << m_i;
+    }
+};
+
+The compiler generates unique class as above for each lambda function, which depend on compiler.
+Capture list will become a constructor argument in class, If you capture argument as value then corresponding type data member is created within the class.
+Moreover, you can declare variable/object in the lambda function argument, which will become an argument to call operator i.e. operator().
+
+Benefits of Using a Lambda Function:
+
+lambda doesn’t cost you performance & as fast as a normal function.
+In addition, code becomes compact, structured & expressive.
+
+
+Capture by Reference/Value:
+---------------------------
+int main() {
+    int x = 100, y = 200;
+
+    auto print = [&] { // Capturing everything by reference(not recommended though)
+        cout << __PRETTY_FUNCTION__ << " : " << x << " , " << y << endl;
+    };
+
+    print();
+    return EXIT_SUCCESS;
+}
+/* Output
+main()::<lambda()> : 100 , 200
+*/
+
+
+In the above example, I have mentioned & in capture list. which captures variable x & y as reference. 
+Similarly, = denotes captured by value, which will create data member of the same type within the closure and copy assignment will take place.
+In addition, the parameter list is optional, you can omit the empty parentheses if you do not pass arguments to the lambda expression.
+
+
+
+Lambda Capture List
+The following table shows different use cases for the same:
+[ ] ( ) { }	no captures
+[=] ( ) { }	captures everything by copy(not recommended)
+[&] ( ) { }	captures everything by reference(not recommended)
+[x] ( ) { }	captures x by copy
+[&x] ( ) { }	captures x by reference
+[&, x] ( ) { }	captures x by copy, everything else by reference
+[=, &x] ( ) { }	captures x by reference, everything else by copy
+
+
+Passing Lambda as Parameter:
+----------------------------
+template <typename Functor>
+void f(Functor functor) {
+    cout << __PRETTY_FUNCTION__ << endl;
+}
+
+/* Or alternatively you can use this
+void f(function<int(int)> functor) {
+    cout << __PRETTY_FUNCTION__ << endl;
+}
+*/
+
+int g() {
+    static int i = 0;
+    return i++;
+}
+
+int main() {
+    auto lambda_func = [i = 0]() mutable { return i++; };
+    f(lambda_func); // Pass lambda
+    f(g);            // Pass function
+}
+/* Output
+Function Type : void f(Functor) [with Functor = main()::<lambda(int)>]
+Function Type : void f(Functor) [with Functor = int (*)(int)]
+*/
+
+Capture Member Variable in Lambda or This Pointer:
+-------------------------------------------------
+class Example {
+    int m_var;
+  public:
+    Example() : m_var(10) {}
+    void func() {
+        [=]() { cout << m_var << endl; }(); // IIFE
+    }
+};
+int main() {
+    Example e;
+    e.func();
+    return EXIT_SUCCESS;
+}
+this pointer can also be captured using [this], [=] or [&]. In any of these cases, class data members(including private) 
+can be accessed as you do in a normal method.
+
+Generic Lambda(C++14)
+---------------------
+const auto l = [](auto a, auto b, auto c) {};
+
+// is equivalent to
+
+struct anonymous {
+    template <class T0, class T1, class T2>
+    auto operator()(T0 a, T1 b, T2 c) const {
+    }
+};
+
+Generic lambda introduced in C++14 which can captures parameters with auto specifier.
+
+Variadic Generic Lambda(C++14):
+-------------------------------
+template <typename... Args>
+void print(Args &&... args) {
+    (void(cout << forward<Args>(args) << endl), ...);
+}
+
+int main() {
+    auto variadic_generic_lambda = [](auto &&... param) {
+        print(forward<decltype(param)>(param)...);
+    };
+
+    variadic_generic_lambda(1, "lol", 1.1);
+    return EXIT_SUCCESS;
+}
+
+Mutable Lambda Function(C++11):
+------------------------------
+Typically, a lambda’s function call operator is const-by-value which means lambda requires mutable  keyword if you are capturing anything by-value.
+
+[]() mutable {}
+
+// is equivalent to
+
+struct anonymous {
+    auto operator()() { // call operator
+    }
+};
+
+Lambda as a Function Pointer(C++11):
+------------------------------------
+auto funcPtr = +[] {};
+static_assert(is_same<decltype(funcPtr), void (*)()>::value);
+
+You can force the compiler to generate lambda as a function pointer rather than closure by adding + in front of it as above.
+
+constexpr Lambda Expression(C++17):
+----------------------------------
+Since C++17, a lambda expression can be declared as constexpr.
+
+constexpr auto sum = [](const auto &a, const auto &b) { return a + b; };
+/*
+    is equivalent to
+
+    constexpr struct anonymous
+    {
+        template <class T1, class T2>
+        constexpr auto operator()(T1 a, T2 b) const
+        {
+            return a + b;
+        }
+    };
+*/
+static_assert(sum(10, 10) == 20);
+Even if you don’t specify constexpr , the function call operator will be  constexpr anyway, if it happens to satisfy all constexpr function requirements.
+
+Template Lambda Expression(C++20):
+----------------------------------
+As we saw above in generic lambda function, we can declare parameters as auto. That in turn templatized by compiler & deduce the appropriate template type. 
+But there was no way to change this template parameter and use real C++ template arguments. For example:
+template <typename T>
+void f(vector<T>&    vec){
+    //. . .
+}
+How do you write the lambda for the above function which takes std::vector of type T? 
+This was the limitation till C++17, but with C++20 it is possible as below:
+
+auto f = []<typename T>(vector<T>&  vec){
+    // . . .
+};
+std::vector<int> v;
+f(v);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
