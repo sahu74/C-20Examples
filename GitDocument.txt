@@ -1,0 +1,74 @@
+…or create a new repository on the command line
+echo "# C-20Examples" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M master
+git remote add origin https://github.com/sahu74/C-20Examples.git
+git push -u origin master
+                
+…or push an existing repository from the command line
+git remote add origin https://github.com/sahu74/C-20Examples.git
+git branch -M master
+git push -u origin master
+
+
+=============
+
+how to unstage a file:
+git commit --amend
+
+
+if you need to remove a single file from the staging area, use
+
+git reset HEAD -- <file>
+
+If you need to remove a whole directory (folder) from the staging area, use
+
+git reset HEAD -- <directoryName>
+
+Your modifications will be kept. When you run git status the file will once again show up as modified but not yet staged.
+
+git rm --cached FILE stages file deletion, without deleting the file form the working tree
+
+ou can unstage files from the index using
+
+git reset HEAD -- path/to/file
+2
+
+If unwanted files were added to the staging area but not yet committed, then a simple reset will do the job:
+
+$ git reset HEAD file
+# Or everything
+$ git reset HEAD 
+
+
+Reset HEAD and add all necessary files to check-in again as below:
+
+ git reset HEAD ---> removes all files from the staging area
+ git add <files, that are required to be committed>
+ git commit -m "<commit message>"
+ git push 
+ 
+ 
+ To check the current status of any file in the current dir, whether it is staged or not:
+
+git status
+
+Staging any files:
+
+git add . for all files in the current directory
+
+git add <filename> for specific file
+
+Unstaging the file:
+
+git restore --staged <filename>
+
+git rm --cached <filePath> does not unstage a file, it actually stages the removal of the file(s) from the repo (assuming it was already committed before) 
+but leaves the file in your working tree (leaving you with an untracked file).
+
+git reset -- <filePath> will unstage any staged changes for the given file(
+
+
+
