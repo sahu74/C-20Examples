@@ -3,7 +3,6 @@
 
 /**
  * Literal class type that wraps a constant expression string.
- *
  * Uses implicit conversion to allow templates to *seemingly* accept constant strings.
  */
 template<size_t N>
