@@ -1,0 +1,142 @@
+C++20 Range Based For Loop Phylosophy:
+=====================================
+
+
+1) C++11 features:
+It is basically added in C++11 first. It is one of the most signficant features added along with auto in C++11.
+Examples in C++11 :
+==================
+// Iterate over STL container
+std::vector<int> v{1,2,3,4};
+for(const auto& i : v)
+  std::cout << i << "\n";
+
+// Over std::string
+std::string s{"1234"};
+for(auto c : s)
+  std::cout << c << "\n";
+
+// over an array
+int a[4]{1,2,3,4};
+for(auto& i : a)
+  std::cout << i << "\n";
+  
+  
+ // over a brace-init-list (std::initializer_list)
+for(auto& i : {1,2,3,4})
+  std::cout << i << "\n";
+  
+  
+ 
+I have extracted the syntax from cPP reference:
+(since C++20)
+// https://en.cppreference.com/w/cpp/language/range-for
+
+init-statement
+auto && __range = range_expression ;
+auto __begin = begin_expr ;
+auto __end = end_expr ;
+
+for ( ; __begin != __end; ++__begin) {
+range_declaration = *__begin;
+loop_statement
+}
+
+
+In C++11/C++14, the above format results in a code similar to the following:
+---------------------------------------------------------------------------
+
+/* modified code from cppreference */
+{  
+  auto&& range = range_expression ; 
+  for (auto b = beginExpr, e = endExpr; b != e; ++b) { 
+    range_declaration = *b; 
+    /*loop body*/
+  } 
+} 
+The Universal Reference:
+The range is a universal reference (because it is declared as auto&&). A universal reference, also known as a forwarding reference, 
+can bind to either an lvalue or an rvalue expression. This suggests the range_expression can be anything including but not limited to - 
+a variable, a const reference, or a function call that returns a temporary.
+
+The range-based for loop has gone over some changes since C++11/C++14. 
+
+C++17 range based for loop:
+---------------------------
+Until C++14, the beginExpr and endExpr had to be of the same type.
+The first change was made in C++17 to allow a range_expression's end to be of a different type than its begin. The second and most recent change, 
+which is from the C++20 standard, adds an optional init-statement for initializing the variables in the loop-scope.
+
+The C++17 standard lifts this restriction on endExpr to be of the same type as beginExpr. 
+Thus, since C++17, the endExpr can also be a sentinel integer value( e.g., a null byte) or even a predicate.
+
+
+
+
+Temporary range expression:
+---------------------------
+If range_expression returns a temporary, its lifetime is extended until the end of the loop, as indicated by binding to the forwarding reference __range, 
+but beware that the lifetime of any temporary within range_expression is not extended.
+
+
+This is resolved  C++20 range based for loop.
+
+
+for (auto& x : foo().items()) { /* .. */ } // undefined behavior if foo() returns by value
+This problem worked around using init-statement (C++20):
+
+for (T thing = foo(); auto& x : thing.items()) { /* ... */ } // OK
+
+
+
+To understand the motivation behind adding init-statement in C++20, let's consider a range_expression that returns a temporary:
+
+std::string foo() {
+ return "This is a test string";
+}
+
+for(auto& c : foo())  // OK with temporary 
+    std::cout << c << "\n";
+	
+This wil work, as he lifetime of the temporary is extended until the end of the loop. However, 
+if the range_expression is changed to have a temporary within it, the results are undefined:
+
+
+Example:
+class A {
+public:
+ A(const char* s):str(s){}
+ std::string& foo() { return str; } 
+private:
+ std::string str; 
+};
+
+for(auto& c : A("Hello World").foo())  //!! Undefined behavior
+    std::cout << c << "\n";
+	
+	
+
+A few more examples of a temporary within a range_expression that can be very tough to spot:
+
+std::vector<std::vector<int>> foo();
+for(auto i : foo().front()) //The parent vector will be destroyed!! 
+  std::cout << i;        
+
+std::shared_ptr<std::string> foo(); 
+for(auto c : *foo()) //The shared_ptr will be destroyed!! 
+  std::cout << c;      
+  
+ 
+All the above cases can be resolved by introducing a variable before the loop to remove the intermediate temporary, e.g.:
+
+A a("Hello World"); 
+for(auto& c : a.foo())
+    std::cout << c << "\n";
+Or, we can use the C++20's init-statement as an alternative to create a variable in the loop-scope:
+
+for(A a("Hello World"); auto& c : a.foo())
+    std::cout << c << "\n";
+	
+	
+	
+
