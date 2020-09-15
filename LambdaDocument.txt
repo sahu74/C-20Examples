@@ -225,11 +225,75 @@ auto f = []<typename T>(vector<T>&  vec){
 std::vector<int> v;
 f(v);
 
+constexpr lambda expressions in C++17:
+-------------------------------------
+Visual Studio 2017 version 15.3 and later (available with /std:c++17): A lambda expression may be declared as constexpr or used in a constant expression 
+when the initialization of each data member that it captures or introduces is allowed within a constant expression.
 
 
+A lambda is implicitly constexpr if its result satisfies the requirements of a constexpr function:
+auto answer = [](int n)
+    {
+        return 32 + n;
+    };
+
+constexpr int response = answer(10);
+
+If a lambda is implicitly or explicitly constexpr, conversion to a function pointer produces a constexpr function:
+
+auto Increment = [](int n)
+    {
+        return n + 1;
+    };
+
+constexpr int(*inc)(int) = Increment;
+	
 
 
+struct S2 { void f(int i); };
+void S2::f(int i)
+{
+    [=]{};          // OK: by-copy capture default
+    [=, &i]{};      // OK: by-copy capture, except i is captured by reference
+    [=, *this]{};   // until C++17: Error: invalid syntax
+                    // since c++17: OK: captures the enclosing S2 by copy
+    [=, this] {};   // until C++20: Error: this when = is the default
+                    // since C++20: OK, same as [=]
+}
 
+#include <iostream>
+ 
+auto make_function(int& x) {
+  return [&]{ std::cout << x << '\n'; };
+}
+ 
+int main() {
+  int i = 3;
+  auto f = make_function(i); // the use of x in f binds directly to i
+  i = 5;
+  f(); // OK; prints 5
+}
+
+Lambda capture of parameter pack:
+-----------------------------------
+Capture parameter packs by value:
+
+template <typename... Args>
+auto f(Args&&... args){
+    // BY VALUE:
+    return [...args = std::forward<Args>(args)] {
+        // ...
+    };
+}
+Capture parameter packs by reference:
+
+template <typename... Args>
+auto f(Args&&... args){
+    // BY REFERENCE:
+    return [&...args = std::forward<Args>(args)] {
+        // ...
+    };
+}
 
 
 
